@@ -77,6 +77,8 @@ class LveDescriptorPool {
 
   void resetPool();
 
+  VkDescriptorPool getDescriptorPool() const { return descriptorPool; }
+
  private:
   LveDevice &lveDevice;
   VkDescriptorPool descriptorPool;
@@ -90,6 +92,7 @@ class LveDescriptorWriter {
 
   LveDescriptorWriter &writeBuffer(uint32_t binding, VkDescriptorBufferInfo *bufferInfo);
   LveDescriptorWriter &writeImage(uint32_t binding, VkDescriptorImageInfo *imageInfo);
+  LveDescriptorWriter& writeSamplerCombinedImage(uint32_t binding, VkDescriptorImageInfo* imageInfo);
 
   bool build(VkDescriptorSet &set);
   void overwrite(VkDescriptorSet &set);

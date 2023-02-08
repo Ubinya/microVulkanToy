@@ -1,11 +1,26 @@
 #include "pmx_loader.h"
+#include <memory>
 #pragma once
 
+#define MAX_STR_BYTE 1024
+
 namespace lve::dataloader {
+
+	int ReadInt(std::ifstream& fin) {
+		char in[4];
+		int ans;
+		fin.read(in, sizeof(int));
+		memcpy(&ans, in, sizeof(int));
+		return ans;
+	}
 	// not tested
-	std::string ReadString(int size, char* in, Encoding encoding) {
-		return "test\0";
-		std::string in1 = in;
+	std::string ReadString(std::ifstream& fin, Encoding encoding) {
+		int size = ReadInt(fin);
+		char buffer[MAX_STR_BYTE];
+		fin.read(buffer, size);
+		return "test string, sicne string loading func under dev\0";
+		//memcpy(&ans, in, sizeof(Byte));
+		std::string in1;
 		if (encoding == Encoding::UTF8) {
 			int nwLen = MultiByteToWideChar(CP_UTF8, 0, in1.c_str(), -1, NULL, 0);
 			wchar_t* pwBuf = new wchar_t[nwLen + 1];
@@ -40,7 +55,7 @@ namespace lve::dataloader {
 		char in[12];
 		fin.read(in, 3 * sizeof(float));
 		glm::vec3 ans;
-		ans.x = -getfloat_from_chars(in, 0);
+		ans.x = getfloat_from_chars(in, 0);
 		ans.y = getfloat_from_chars(in, sizeof(float));
 		ans.z = getfloat_from_chars(in, 2 * sizeof(float));
 		return ans;
@@ -106,13 +121,6 @@ namespace lve::dataloader {
 		return ans;
 	}
 
-	int ReadInt(std::ifstream& fin) {
-		char in[4];
-		int ans;
-		fin.read(in, sizeof(int));
-		memcpy(&ans, in, sizeof(int));
-		return ans;
-	}
 
 	int ReadUIndex(std::ifstream& fin, int size) {
 		if (size == 1) {
@@ -162,8 +170,8 @@ namespace lve::dataloader {
 	}
 
 	void PMX_only_obj::Reload(std::ifstream& fin) {
-		Textures.reset();
-		Materials.reset();
+		Textures.clear();
+		Materials.clear();
 
 		int fileHeader=ReadInt(fin);
 		if (fileHeader != 0x20584D50)throw std::runtime_error("File is not Pmx format.");//' XMP'
@@ -192,19 +200,19 @@ namespace lve::dataloader {
 
 		size = ReadInt(fin);
 		fin.read((char*)strbuff, size);
-		Name = ReadString(size, strbuff, encoding);
+		Name = ReadString(fin, encoding);
 
 		size = ReadInt(fin);
 		fin.read((char*)strbuff, size);
-		NameEN = ReadString(size, strbuff, encoding);
+		NameEN = ReadString(fin, encoding);
 
 		size = ReadInt(fin);
 		fin.read((char*)strbuff, size);
-		Description = ReadString(size, strbuff, encoding);
+		Description = ReadString(fin, encoding);
 
 		size = ReadInt(fin);
 		fin.read((char*)strbuff, size);
-		DescriptionEN = ReadString(size, strbuff, encoding);
+		DescriptionEN = ReadString(fin, encoding);
 
 		//load vertices info
 		int countOfVertex=ReadInt(fin);
@@ -215,11 +223,12 @@ namespace lve::dataloader {
 
 			//coord norm uv
 			vertex.Coordinate = ReadVector3XInv(fin);
-			//std::cout << "xyz: " << vertex->Coordinate.x<< vertex->Coordinate.y<< vertex->Coordinate.z << std::endl;
+			//std::cout << "xyz: " << vertex.Coordinate.x<< vertex.Coordinate.y<< vertex.Coordinate.z << std::endl;
 			vertex.Normal = ReadVector3XInv(fin);
-			//std::cout << "normal: " << vertex->Normal.x<< vertex->Normal.y<<vertex->Normal.z << std::endl;
+			//std::cout << "normal: " << vertex.Normal.x<< vertex.Normal.y<<vertex.Normal.z << std::endl;
 			vertex.UvCoordinate = ReadVector2(fin);
-			//std::cout << "uv: " << vertex->UvCoordinate.x<< vertex->UvCoordinate.y << std::endl;
+			//std::cout << "uv: " << vertex.UvCoordinate.x<< vertex.UvCoordinate.y << std::endl;
+
 			//ex uv
 			//std::cout << "ex uv num: " << extraUVNumber << std::endl;
 			if (extraUVNumber > 0){
@@ -244,6 +253,7 @@ namespace lve::dataloader {
 				vertex.boneId0 = ReadIndex(fin, boneIndexSize);
 				vertex.boneId1 = ReadIndex(fin, boneIndexSize);
 				vertex.boneId2 = -1;
+
 				vertex.boneId3 = -1;
 				vertex.Weights.x = ReadFloat(fin);
 				vertex.Weights.y = 1.0f - vertex.Weights.x;
@@ -281,21 +291,52 @@ namespace lve::dataloader {
 		//--end of per vertex loading
 
 		//--begin of triangle loading
-		
 		int countOfTriangleIndex = ReadInt(fin);
-		std::cout << "mmd model triangles num: " << countOfTriangleIndex << std::endl;
-		for (int i = 0; i < 3000; i++)
+		//std::cout << "mmd model triangles num: " << countOfTriangleIndex << std::endl;
+		for (int i = 0; i < countOfTriangleIndex; i++)
 		{
 			TriangleIndexs.push_back(ReadUIndex(fin, vertexIndexSize));
 		}
-
-		
 		//--end of triangle loading
 
 		//--begin of texture loading
+		int countOfTexture = ReadInt(fin);
+		for (int i = 0; i < countOfTexture; i++) {
+			PMX_Texture texture = PMX_Texture();
+			texture.TexturePath = ReadString(fin, encoding);
+			// string reading not work
+			Textures.push_back(texture);
+		}
 		//--end of texture loading
 
 		//--begin of material loading
+		int countOfMaterial = ReadInt(fin);
+		int triangleIndexBaseShift = 0;
+		for (int i = 0; i < countOfMaterial; i++) {
+			PMX_Material material = PMX_Material();
+			material.Name = ReadString(fin, encoding);
+			material.NameEN = ReadString(fin, encoding);
+			material.DiffuseColor = ReadVector4(fin);
+			material.SpecularColor = ReadVector4(fin);
+			material.AmbientColor = ReadVector3(fin);
+			material.DrawFlags = (PMX_DrawFlag)ReadByte(fin);
+			material.EdgeColor = ReadVector4(fin);
+			material.EdgeScale = ReadFloat(fin);
+			material.TextureIndex = ReadIndex(fin, textureIndexSize);
+			material.SecondaryTextureIndex = ReadIndex(fin, textureIndexSize);
+			material.SecondaryTextureType = ReadByte(fin);
+			material.UseToon = ReadByte(fin) != 0;
+			if (material.UseToon) material.ToonIndex = ReadByte(fin);
+			else material.ToonIndex = ReadIndex(fin, textureIndexSize);
+			material.Meta = ReadString(fin, encoding);
+
+			material.TriangeIndexStartNum = triangleIndexBaseShift;
+			material.TriangeIndexNum = ReadInt(fin);
+			triangleIndexBaseShift += material.TriangeIndexNum;
+
+			Materials.push_back(material);
+	
+		}
 		//--end of material loading
 
 	}

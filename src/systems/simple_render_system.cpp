@@ -13,11 +13,6 @@
 
 namespace lve {
 
-struct SimplePushConstantData {
-  glm::mat4 modelMatrix{1.f};
-  glm::mat4 normalMatrix{1.f};
-};
-
 SimpleRenderSystem::SimpleRenderSystem(
     LveDevice& device, VkRenderPass renderPass, VkDescriptorSetLayout globalSetLayout)
     : lveDevice{device} {
@@ -56,6 +51,7 @@ void SimpleRenderSystem::createPipeline(VkRenderPass renderPass) {
   LvePipeline::defaultPipelineConfigInfo(pipelineConfig);
   pipelineConfig.renderPass = renderPass;
   pipelineConfig.pipelineLayout = pipelineLayout;
+  pipelineConfig.subpass = 0;
   lvePipeline = std::make_unique<LvePipeline>(
       lveDevice,
       "shaders/simple_shader.vert.spv",

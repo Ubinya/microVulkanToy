@@ -5,6 +5,7 @@ layout (location = 1) in vec3 fragPosWorld;
 layout (location = 2) in vec3 fragNormalWorld;
 
 
+
 layout (location = 0) out vec4 outColor;
 
 struct PointLight {
@@ -58,18 +59,25 @@ void main() {
     specularLight += intensity * blinnTerm;
   }
 
-  vec4 tmp_color = vec4(diffuseLight * fragColor + specularLight * fragColor, 1.0);
   
-  highp float NoL = min(dot(surfaceNormal, viewDirection), 1.0);
+  vec4 tmp_color = vec4(diffuseLight * fragColor + specularLight * fragColor, 1.0);
+
+
+
+PointLight light = ubo.pointLights[0];
+  highp vec3  L   = normalize(fragPosWorld-light.position.xyz);
+  highp float NoL = min(dot(surfaceNormal, L), 1.0);
+
   if (NoL > 0.0)
   {
         highp float shadow;
         {
-            highp vec4 position_clip = ubo.view * vec4(fragPosWorld,1.0);
+            highp vec4 position_clip = ubo.projection * vec4(fragPosWorld,1.0);
             highp vec3 position_ndc  = position_clip.xyz / position_clip.w;
 
             highp vec2 uv = ndcxy_to_uv(position_ndc.xy);
-            highp float closest_depth = texture(directional_light_shadow, uv).r + 0.0075;
+
+            highp float closest_depth = texture(directional_light_shadow, uv).r + 0.000075;
             highp float current_depth = position_ndc.z;
 
             shadow = (closest_depth >= current_depth) ? 1.0f : -1.0f;
@@ -77,11 +85,9 @@ void main() {
 
         if (shadow < 0.0f)
         {
-            tmp_color = tmp_color - vec4(0.2,0.2,0.2,.0);
+            outColor = vec4(.0,.0,.0,1.0);
         }
-  }
-
-  outColor= tmp_color;
-  
+    }
+    outColor= tmp_color;
 }
 

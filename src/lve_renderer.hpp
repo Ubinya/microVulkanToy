@@ -19,6 +19,8 @@ class LveRenderer {
   LveRenderer &operator=(const LveRenderer &) = delete;
 
   VkRenderPass getSwapChainRenderPass() const { return lveSwapChain->getRenderPass(); }
+  VkRenderPass getShadowRenderPass() const { return lveSwapChain->getShadowRenderPass(); }
+  std::vector<VkImageView> getShadowColorImages() { return lveSwapChain->getShadowColorImages(); }
   float getAspectRatio() const { return lveSwapChain->extentAspectRatio(); }
   bool isFrameInProgress() const { return isFrameStarted; }
 
@@ -36,6 +38,8 @@ class LveRenderer {
   void endFrame();
   void beginSwapChainRenderPass(VkCommandBuffer commandBuffer);
   void endSwapChainRenderPass(VkCommandBuffer commandBuffer);
+  void beginShadowRenderPass(VkCommandBuffer commandBuffer);
+  void endShadowRenderPass(VkCommandBuffer commandBuffer);
 
  private:
   void createCommandBuffers();

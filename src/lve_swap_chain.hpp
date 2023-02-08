@@ -26,7 +26,9 @@ class LveSwapChain {
   LveSwapChain &operator=(const LveSwapChain &) = delete;
 
   VkFramebuffer getFrameBuffer(int index) { return swapChainFramebuffers[index]; }
+  VkFramebuffer getShadowframeBuffer(int index) { return shadowFramebuffers[index]; }
   VkRenderPass getRenderPass() { return renderPass; }
+  VkRenderPass getShadowRenderPass() { return shadowRenderPass; }
   VkImageView getImageView(int index) { return swapChainImageViews[index]; }
   size_t imageCount() { return swapChainImages.size(); }
   VkFormat getSwapChainImageFormat() { return swapChainImageFormat; }
@@ -47,14 +49,19 @@ class LveSwapChain {
            swapChain.swapChainImageFormat == swapChainImageFormat;
   }
 
+  std::vector<VkImageView> getShadowColorImages() { return shadowColorImageViews; }
+
  private:
   void init();
   void createSwapChain();
   void createImageViews();
   void createDepthResources();
   void createRenderPass();
+  void createShadowRenderPass();
   void createFramebuffers();
   void createSyncObjects();
+
+  void createShadowResources();
 
   // Helper functions
   VkSurfaceFormatKHR chooseSwapSurfaceFormat(
@@ -69,6 +76,15 @@ class LveSwapChain {
 
   std::vector<VkFramebuffer> swapChainFramebuffers;
   VkRenderPass renderPass;
+  std::vector<VkFramebuffer> shadowFramebuffers;
+  VkRenderPass shadowRenderPass;
+
+  std::vector<VkImage> shadowColorImages;
+  std::vector<VkDeviceMemory> shadowColorImageMemorys;
+  std::vector<VkImageView> shadowColorImageViews;
+  std::vector<VkImage> shadowDepthImages;
+  std::vector<VkDeviceMemory> shadowDepthImageMemorys;
+  std::vector<VkImageView> shadowDepthImageViews;
 
   std::vector<VkImage> depthImages;
   std::vector<VkDeviceMemory> depthImageMemorys;

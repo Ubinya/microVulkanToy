@@ -64,7 +64,7 @@ namespace lve::dataloader {
 		float EdgeScale;
 		int TextureIndex;
 		int SecondaryTextureIndex;
-		std::byte SecondaryTextureType;
+		Byte SecondaryTextureType;
 		bool UseToon;
 		int ToonIndex;
 		std::string Meta;
@@ -85,8 +85,8 @@ namespace lve::dataloader {
 		std::vector<PMX_Vertex> Vertices;
 		uint32_t* TriangleIndexs1;
 		std::vector<uint32_t> TriangleIndexs;
-		std::shared_ptr<PMX_Texture> Textures;
-		std::shared_ptr<PMX_Material> Materials;
+		std::vector<PMX_Texture> Textures;
+		std::vector<PMX_Material> Materials;
 
 		std::vector<int> Triangle;
 		

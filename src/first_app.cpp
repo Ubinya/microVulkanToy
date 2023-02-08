@@ -8,11 +8,14 @@
 
 #include "dataloader/pmx_loader.h"
 
+#include "systems/directional_light_shadow.h"
+
 // libs
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
+
 
 // std
 #include <array>
@@ -23,11 +26,47 @@
 
 namespace lve {
 
+    VkSampler getOrCreateNearestSampler(VkPhysicalDevice physical_device, VkDevice device)
+    {
+        VkSampler m_nearest_sampler;
+        {
+            VkPhysicalDeviceProperties physical_device_properties{};
+            vkGetPhysicalDeviceProperties(physical_device, &physical_device_properties);
+
+            VkSamplerCreateInfo samplerInfo{};
+
+            samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+            samplerInfo.magFilter = VK_FILTER_NEAREST;
+            samplerInfo.minFilter = VK_FILTER_NEAREST;
+            samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+            samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+            samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+            samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+            samplerInfo.mipLodBias = 0.0f;
+            samplerInfo.anisotropyEnable = VK_FALSE;
+            samplerInfo.maxAnisotropy = physical_device_properties.limits.maxSamplerAnisotropy; // close :1.0f
+            samplerInfo.compareEnable = VK_FALSE;
+            samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+            samplerInfo.minLod = 0.0f;
+            samplerInfo.maxLod = 8.0f; // todo: m_irradiance_texture_miplevels
+            samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+            samplerInfo.unnormalizedCoordinates = VK_FALSE;
+
+            if (vkCreateSampler(device, &samplerInfo, nullptr, &m_nearest_sampler) != VK_SUCCESS)
+            {
+                throw std::runtime_error("vk create sampler");
+            }
+        }
+
+        return m_nearest_sampler;
+    }
+
 FirstApp::FirstApp() {
   globalPool =
       LveDescriptorPool::Builder(lveDevice)
           .setMaxSets(LveSwapChain::MAX_FRAMES_IN_FLIGHT)
           .addPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, LveSwapChain::MAX_FRAMES_IN_FLIGHT)
+          .addPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, LveSwapChain::MAX_FRAMES_IN_FLIGHT)
           .build();
   loadGameObjects();
 }
@@ -46,18 +85,33 @@ void FirstApp::run() {
     uboBuffers[i]->map();
   }
 
+  //create descriptor set layout
   auto globalSetLayout =
       LveDescriptorSetLayout::Builder(lveDevice)
           .addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS)
+          .addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_ALL_GRAPHICS)
           .build();
+
+
+  //setup descriptor set
+  std::vector<VkDescriptorImageInfo> directional_light_shadow_texture_image_info(LveSwapChain::MAX_FRAMES_IN_FLIGHT);
+  for (int i = 0; i < directional_light_shadow_texture_image_info.size(); i++) {
+      directional_light_shadow_texture_image_info[i].sampler =
+          getOrCreateNearestSampler(lveDevice.getPhysicalDevice(), lveDevice.device());
+      directional_light_shadow_texture_image_info[i].imageView = lveRenderer.getShadowColorImages()[i];
+      directional_light_shadow_texture_image_info[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+  }
+  
 
   std::vector<VkDescriptorSet> globalDescriptorSets(LveSwapChain::MAX_FRAMES_IN_FLIGHT);
   for (int i = 0; i < globalDescriptorSets.size(); i++) {
     auto bufferInfo = uboBuffers[i]->descriptorInfo();
     LveDescriptorWriter(*globalSetLayout, *globalPool)
         .writeBuffer(0, &bufferInfo)
+        .writeImage(1, &directional_light_shadow_texture_image_info[i])
         .build(globalDescriptorSets[i]);
   }
+
 
   SimpleRenderSystem simpleRenderSystem{
       lveDevice,
@@ -67,6 +121,14 @@ void FirstApp::run() {
       lveDevice,
       lveRenderer.getSwapChainRenderPass(),
       globalSetLayout->getDescriptorSetLayout()};
+
+  // added directional light shadow system
+  DirectionalLightShadowSystem directioanlLightShadowSystem{
+      lveDevice,
+      lveRenderer.getShadowRenderPass(),
+      globalSetLayout->getDescriptorSetLayout()};
+
+
   LveCamera camera{};
 
   auto viewerObject = LveGameObject::createGameObject();
@@ -107,14 +169,18 @@ void FirstApp::run() {
       uboBuffers[frameIndex]->writeToBuffer(&ubo);
       uboBuffers[frameIndex]->flush();
 
-      // render
-      lveRenderer.beginSwapChainRenderPass(commandBuffer);
+      // shadow map
+      lveRenderer.beginShadowRenderPass(commandBuffer);
+      directioanlLightShadowSystem.render(frameInfo);
+      lveRenderer.endSwapChainRenderPass(commandBuffer);
 
+      //render scene
+      lveRenderer.beginSwapChainRenderPass(commandBuffer);
       // order here matters
       simpleRenderSystem.renderGameObjects(frameInfo);
       pointLightSystem.render(frameInfo);
-
       lveRenderer.endSwapChainRenderPass(commandBuffer);
+
       lveRenderer.endFrame();
     }
   }
@@ -124,7 +190,8 @@ void FirstApp::run() {
 
 void FirstApp::loadGameObjects() {
     
-    dataloader::PMX_only_obj mmdModel = dataloader::PMX_only_obj("D:/GitHub/Project-Graphic/keqing.pmx");
+    /*
+    dataloader::PMX_only_obj mmdModel = dataloader::PMX_only_obj("D:/GitHub/WA2000_GFL.pmx");
 
     std::shared_ptr<LveModel> lveModel = LveModel::createModelFromPMX(lveDevice, mmdModel);
     auto wa2k = LveGameObject::createGameObject();
@@ -132,6 +199,8 @@ void FirstApp::loadGameObjects() {
     wa2k.transform.translation = { 0.f, .5f, 0.f };
     wa2k.transform.scale = { .1f, -.1f, .1f };
     gameObjects.emplace(wa2k.getId(), std::move(wa2k));
+    */
+    
     
     /*
     std::shared_ptr<LveModel> lveModel = LveModel::createModelFromFile(lveDevice, "models/bunny1.obj");
@@ -142,12 +211,12 @@ void FirstApp::loadGameObjects() {
     gameObjects.emplace(bunny.getId(), std::move(bunny));
     */
 
-  lveModel = LveModel::createModelFromFile(lveDevice, "models/flat_vase.obj");
-  auto flatVase = LveGameObject::createGameObject();
-  flatVase.model = lveModel;
-  flatVase.transform.translation = {-.5f, .5f, 0.f};
-  flatVase.transform.scale = {3.f, 1.5f, 3.f};
-  gameObjects.emplace(flatVase.getId(), std::move(flatVase));
+    std::shared_ptr<LveModel> lveModel = LveModel::createModelFromFile(lveDevice, "models/flat_vase.obj");
+    auto flatVase = LveGameObject::createGameObject();
+    flatVase.model = lveModel;
+    flatVase.transform.translation = {-.5f, .5f, 0.f};
+    flatVase.transform.scale = {1.f, .5f, 1.f};
+    gameObjects.emplace(flatVase.getId(), std::move(flatVase));
 
   lveModel = LveModel::createModelFromFile(lveDevice, "models/smooth_vase.obj");
   auto smoothVase = LveGameObject::createGameObject();
